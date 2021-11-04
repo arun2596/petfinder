@@ -23,8 +23,10 @@ import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+import tqdm
 import random
+
+from sklearn.metrics import mean_squared_error
 # ------------------------- CUSTOM IMPORTS & UTILS --------------------------------
 
 from utils import SquarePad, Rescale, Normalize, Rerange
@@ -186,6 +188,14 @@ class PawpularityModel(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def freeze_backbone(self):
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = False
+
+    def unfreeze_backbone(self):
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = True
+
     def forward(
             self,
             image=None,
@@ -205,6 +215,8 @@ class PawpularityModel(nn.Module):
 
         logits /= len(self.dropouts)
 
+        logits = torch.clip(logits,min=0, max=100)
+
         #
         #         # calculate loss
         loss = None
@@ -213,7 +225,7 @@ class PawpularityModel(nn.Module):
             loss_fn = torch.nn.MSELoss()
             logits = logits.view(-1).to(target.dtype)
             # print(logits)
-            loss = torch.sqrt(loss_fn(logits, target.view(-1)))
+            loss = torch.sqrt(loss_fn(logits, target.view(-1)) + 1e-6)
 
         return (loss, logits) if loss is not None else logits
 
@@ -243,7 +255,7 @@ class AverageMeter(object):
 
 class Trainer:
     def __init__(self, model, optimizer, model_output_location, log_interval=1,
-                 evaluate_interval=10):
+                 evaluate_interval=2):
         self.model = model
         self.optimizer = optimizer
         self.log_interval = log_interval
@@ -301,7 +313,7 @@ class Trainer:
                                                                                            result_dict['val_loss'][-1]))
                     result_dict["best_val_loss"] = result_dict['val_loss'][-1]
                     torch.save(self.model.state_dict(), self.model_output_location + f"model{fold}.bin")
-
+                self.model.train()
         result_dict['train_loss'].append(losses.avg)
         return result_dict
 
@@ -379,10 +391,9 @@ def adjust_learning_rate(optimizer, epoch, lr):
 
 
 def configure(train, fold=0):
-    set_seed(0)
     epochs = 5
     max_len = 250
-    batch_size = 2
+    batch_size = 64
 
     model = PawpularityModel('efficientnet-b3-pawpularity', config)
 
@@ -418,9 +429,16 @@ def configure(train, fold=0):
     )
 
 
-def run(train, fold=0, model_ouput_location='model_output/finetuning/'):
+def run(train, fold=0, model_ouput_location='model_output/finetuning/', freeze_backbone=False):
     model, optimizer, train_loader, valid_loader, result_dict, epochs = configure(train, fold)
 
+    if freeze_backbone:
+        model.freeze_backbone()
+    else:
+        model.load_state_dict(torch.load(model_ouput_location + 'model0.bin'))
+        model.unfreeze_backbone()
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = 0.001
     trainer = Trainer(model, optimizer, model_ouput_location)
     train_time_list = []
 
@@ -448,28 +466,39 @@ def main():
     train = pd.read_csv('data/raw/train.csv')
     test = pd.read_csv('data/raw/test.csv')
 
-    #train['kfold'] = [0] * 2000 + [1] * (train.shape[0] - 2000)
+    set_seed(0)
 
-    train = train.head(100)
-    train['kfold'] = [0] * 50 + [1] * 50
+    validation_proportion = 0.15
 
-    model_output_location = 'model_output/finetuning'
+    target_frequency = train[['Id', 'Pawpularity']].groupby('Pawpularity').count().reset_index()
+    target_frequency['Proba'] = sum(target_frequency['Id'])/target_frequency['Id']
+    target_frequency['Proba'] = target_frequency['Proba']/sum(target_frequency['Proba'])
+
+    row_proba = train[['Pawpularity']].merge(target_frequency, how='left', left_on='Pawpularity', right_on='Pawpularity')['Proba']
+    row_proba = row_proba/sum(row_proba)
+
+    indices = np.random.choice(train.index, size=int(train.shape[0] * validation_proportion), replace=False, p=row_proba)
+
+    train['kfold'] = 1
+    train.loc[indices, 'kfold'] = 0
+
+    model_output_location = 'model_output/finetuning/'
 
     result_list = []
     for fold in range(1):
         print('----')
         print(f'FOLD: {fold}')
-        result_dict = run(train, fold, model_output_location)
+        result_dict = run(train, fold, model_output_location, freeze_backbone=False)
         result_list.append(result_dict)
         print('----')
 
     [print("FOLD::", i, "Loss:: ", fold['best_val_loss']) for i, fold in enumerate(result_list)]
 
     oof = np.zeros(len(train))
-    for fold in tqdm(range(1), total=1):
+    for fold in tqdm.tqdm(range(1), total=1):
         model = PawpularityModel('efficientnet-b3-pawpularity', config)
         model.load_state_dict(
-            torch.load(model_ouput_location + f'model{fold}.bin')
+            torch.load(model_output_location + f'model{fold}.bin')
         )
         model.cuda()
         model.eval()
@@ -518,3 +547,7 @@ main()
 # print([x for x in backbone.named_modules()])
 
 # print(dir(backbone))
+
+
+## ADD CODE TO TRAIN FRON LAYERS FIRST AND THEN BACK LAYERS
+## SEED

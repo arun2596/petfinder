@@ -1,0 +1,13 @@
+{
+  'seed': ,
+  'backbone_model': 'efficient-net-b3',
+  'evaluate_per': 'epoch',
+  'evaluation interval': 1,
+  'learning rate_backbone': ,
+  'learning_rate_head': ,
+  'batch_size': ,
+  'output_location': ,
+  'pre_trained_model_location': ,
+  
+}
+
