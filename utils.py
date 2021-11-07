@@ -1,6 +1,48 @@
-import torchvision.transforms.functional as F
 import torch
+import torchvision
+import torchvision.transforms.functional as F
 
+import numpy as np
+import random
+
+
+def set_seed(seed):
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    return
+
+
+def adjust_learning_rate(optimizer, epoch, lr):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    lr = lr * (0.1 ** (epoch // 30))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return
+
+class AverageMeter(object):
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+        self.max = 0
+        self.min = 1e5
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+        if val > self.max:
+            self.max = val
+        if val < self.min:
+            self.min = val
 
 class SquarePad(object):
     def __call__(self, sample):
@@ -46,16 +88,14 @@ class Rescale(object):
 
         return {'image': img, 'target': target}
 
-class Rerange(object):
 
-    def __init__(self, min=0, max=1):
-        self.min = 0
-        self.max = 1
+class Rerange(object):
 
     def __call__(self, sample):
         image, target = sample['image'], sample['target']
 
-        return {'image': image/255, 'target': target}
+        return {'image': image / 255.0, 'target': target}
+
 
 class Normalize(object):
 
@@ -67,5 +107,18 @@ class Normalize(object):
         image, target = sample['image'], sample['target']
 
         img = F.normalize(image, mean=self.mean, std=self.std)
+
+        return {'image': img, 'target': target}
+
+
+class FlipLR(object):
+
+    def __init__(self, proba):
+        self.proba = proba
+
+    def __call__(self, sample):
+        image, target = sample['image'], sample['target']
+
+        img = torchvision.transforms.RandomHorizontalFlip(p=self.proba)(image)
 
         return {'image': img, 'target': target}

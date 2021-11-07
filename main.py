@@ -29,18 +29,7 @@ import random
 from sklearn.metrics import mean_squared_error
 # ------------------------- CUSTOM IMPORTS & UTILS --------------------------------
 
-from utils import SquarePad, Rescale, Normalize, Rerange
-
-
-# -------------------------- SEED --------------------------------------------------
-
-def set_seed(seed):
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    return
+from utils import set_seed, adjust_learning_rate, SquarePad, Rescale, Normalize, Rerange, FlipLR, AverageMeter
 
 
 # -------------------------- CREATE DATASET ----------------------------------------
@@ -88,24 +77,32 @@ class DatasetRetriever(Dataset):
 def make_loader(
         data,
         batch_size,
-        input_shape=(256, 256),
+        input_shape=(528, 528),
         fold=0,
         root_dir=os.path.join('data', 'raw')
 ):
-    train_set, valid_set = data[data['kfold'] != fold], data[data['kfold'] == fold]
+    dataset ={}
+    dataset['train'], dataset['valid'] = data[data['kfold'] != fold], data[data['kfold'] == fold]
 
-    transform = transforms.Compose([
+    transform = {'train': transforms.Compose([
         SquarePad(),
         Rescale(input_shape),
         Rerange(),
         Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-    ])
+                  std=[0.229, 0.224, 0.225]),
+        FlipLR(0.5)
+    ]),
+        'valid': transforms.Compose([
+            SquarePad(),
+            Rescale(input_shape),
+            Rerange(),
+            Normalize(mean=[0.485, 0.456, 0.406],
+                      std=[0.229, 0.224, 0.225])
+        ])}
 
-    train_dataset = DatasetRetriever(train_set, transform=transform, root_dir=root_dir, mode='train')
-    valid_dataset = DatasetRetriever(valid_set, transform=transform, root_dir=root_dir, mode='valid')
+    train_dataset, valid_dataset = [DatasetRetriever(dataset[mode], transform=transform[mode], root_dir=root_dir, mode=mode) for mode in ['train', 'valid']]
 
-    train_sampler = RandomSampler(train_dataset)
+    train_sampler = RandomSampler(dataset['train'])
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -115,7 +112,7 @@ def make_loader(
         num_workers=4
     )
 
-    valid_sampler = SequentialSampler(valid_dataset)
+    valid_sampler = SequentialSampler(dataset['valid'])
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=batch_size // 2,
@@ -156,25 +153,28 @@ class PawpularityModel(nn.Module):
     def __init__(
             self,
             model_name,
-            config,
             multisample_dropout=False
     ):
         super(PawpularityModel, self).__init__()
         self.model_name = model_name
-        self.config = config
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b3')
+        self.backbone = EfficientNet.from_pretrained('efficientnet-b6')
         self.backbone._fc = nn.Identity()
-        self.layer_norm = nn.LayerNorm(config.hidden_size)
+
+        self.hidden_size = self.get_hidden_size()
+
         if multisample_dropout:
             self.dropouts = nn.ModuleList([
                 nn.Dropout(0.5) for _ in range(5)
             ])
         else:
             self.dropouts = nn.ModuleList([nn.Dropout(0.3)])
-        self.regressor = nn.Linear(config.hidden_size, 1)
+        self.regressor = nn.Linear(self.hidden_size, 1)
 
-        self._init_weights(self.layer_norm)
         self._init_weights(self.regressor)
+
+    def get_hidden_size(self):
+        x = torch.randn(1, 3, 300, 300)
+        return self.backbone(x).shape[-1]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -204,18 +204,18 @@ class PawpularityModel(nn.Module):
 
         backbone_output = self.backbone(image)
 
-        layer_norm_out = self.layer_norm(backbone_output)
+        # layer_norm_out = self.layer_norm(backbone_output)
 
         # multi-sample dropout
         for i, dropout in enumerate(self.dropouts):
             if i == 0:
-                logits = self.regressor(dropout(layer_norm_out))
+                logits = self.regressor(dropout(backbone_output))
             else:
-                logits += self.regressor(dropout(layer_norm_out))
+                logits += self.regressor(dropout(backbone_output))
 
         logits /= len(self.dropouts)
 
-        logits = torch.clip(logits,min=0, max=100)
+        logits = torch.clip(logits, min=0, max=100)
 
         #
         #         # calculate loss
@@ -230,32 +230,9 @@ class PawpularityModel(nn.Module):
         return (loss, logits) if loss is not None else logits
 
 
-class AverageMeter(object):
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-        self.max = 0
-        self.min = 1e5
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-        if val > self.max:
-            self.max = val
-        if val < self.min:
-            self.min = val
-
-
 class Trainer:
     def __init__(self, model, optimizer, model_output_location, log_interval=1,
-                 evaluate_interval=2):
+                 evaluate_interval=130):
         self.model = model
         self.optimizer = optimizer
         self.log_interval = log_interval
@@ -322,36 +299,6 @@ class Evaluator:
     def __init__(self, model):
         self.model = model
 
-    def worst_result(self):
-        ret = {
-            'loss': float('inf'),
-            'accuracy': 0.0
-        }
-        return ret
-
-    def result_to_str(self, result):
-        ret = [
-            'epoch: {epoch:0>3}',
-            'loss: {loss: >4.2e}'
-        ]
-        for metric in self.evaluation_metrics:
-            ret.append('{}: {}'.format(metric.name, metric.fmtstr))
-        return ', '.join(ret).format(**result)
-
-    def save(self, result):
-        with open('result_dict.json', 'w') as f:
-            f.write(json.dumps(result, sort_keys=True, indent=4, ensure_ascii=False))
-
-    def load(self):
-        result = self.worst_result
-        if os.path.exists('result_dict.json'):
-            with open('result_dict.json', 'r') as f:
-                try:
-                    result = json.loads(f.read())
-                except:
-                    pass
-        return result
-
     def evaluate(self, data_loader, epoch, result_dict):
         losses = AverageMeter()
 
@@ -368,7 +315,7 @@ class Evaluator:
                 )
 
                 loss, logits = outputs
-                #print(loss)
+                # print(loss)
                 losses.update(loss.item(), target.size(0))
 
         print('----Validation Results Summary----')
@@ -378,88 +325,83 @@ class Evaluator:
         return result_dict
 
 
-class config:
-    hidden_size = 1536
+class FineTuning:
+
+    def __init__(self, config):
+        self.config = config
+
+    def run(self):
 
 
-def adjust_learning_rate(optimizer, epoch, lr):
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = lr * (0.1 ** (epoch // 30))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-    return
+    def configure_fold(self, fold=0):
+        epochs = 5
+        max_len = 250
+        batch_size = 64
 
+        model = PawpularityModel('efficientnet-b3-pawpularity')
 
-def configure(train, fold=0):
-    epochs = 5
-    max_len = 250
-    batch_size = 64
+        train_loader, valid_loader = make_loader(train, batch_size=batch_size, fold=fold)
 
-    model = PawpularityModel('efficientnet-b3-pawpularity', config)
+        num_update_steps_per_epoch = len(train_loader)
+        max_train_steps = epochs * num_update_steps_per_epoch
 
-    train_loader, valid_loader = make_loader(train, batch_size=batch_size, fold=fold)
+        optimizer = torch.optim.SGD(model.parameters(), 0.3, momentum=0.9, weight_decay=1e-4)
 
-    num_update_steps_per_epoch = len(train_loader)
-    max_train_steps = epochs * num_update_steps_per_epoch
+        if torch.cuda.device_count() >= 1:
+            print('Model pushed to {} GPU(s), type {}.'.format(
+                torch.cuda.device_count(),
+                torch.cuda.get_device_name(0))
+            )
+            model = model.cuda()
+        else:
+            raise ValueError('CPU training is not supported')
 
-    optimizer = torch.optim.SGD(model.parameters(), 0.1, momentum=0.9, weight_decay=1e-4)
-
-    if torch.cuda.device_count() >= 1:
-        print('Model pushed to {} GPU(s), type {}.'.format(
-            torch.cuda.device_count(),
-            torch.cuda.get_device_name(0))
+        result_dict = {
+            'epoch': [],
+            'train_loss': [],
+            'val_loss': [],
+            'best_val_loss': np.inf
+        }
+        return (
+            model,
+            optimizer,
+            train_loader,
+            valid_loader,
+            result_dict,
+            epochs
         )
-        model = model.cuda()
-    else:
-        raise ValueError('CPU training is not supported')
 
-    result_dict = {
-        'epoch': [],
-        'train_loss': [],
-        'val_loss': [],
-        'best_val_loss': np.inf
-    }
-    return (
-        model,
-        optimizer,
-        train_loader,
-        valid_loader,
-        result_dict,
-        epochs
-    )
+    def run_fold(self, train, fold=0, model_ouput_location='model_output/finetuning/', freeze_backbone=False):
+        model, optimizer, train_loader, valid_loader, result_dict, epochs = configure(train, fold)
 
+        if freeze_backbone:
+            model.freeze_backbone()
+        else:
+            model.load_state_dict(torch.load(model_ouput_location + 'model0.bin'))
+            model.unfreeze_backbone()
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = 0.001
+        trainer = Trainer(model, optimizer, model_ouput_location)
+        train_time_list = []
 
-def run(train, fold=0, model_ouput_location='model_output/finetuning/', freeze_backbone=False):
-    model, optimizer, train_loader, valid_loader, result_dict, epochs = configure(train, fold)
+        for epoch in range(epochs):
+            # adjust_learning_rate(optimizer, epoch, 0.1)
 
-    if freeze_backbone:
-        model.freeze_backbone()
-    else:
-        model.load_state_dict(torch.load(model_ouput_location + 'model0.bin'))
-        model.unfreeze_backbone()
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = 0.001
-    trainer = Trainer(model, optimizer, model_ouput_location)
-    train_time_list = []
+            result_dict['epoch'] = epoch
 
-    for epoch in range(epochs):
-        # adjust_learning_rate(optimizer, epoch, 0.1)
+            torch.cuda.synchronize()
+            tic1 = time.time()
 
-        result_dict['epoch'] = epoch
+            result_dict = trainer.train(train_loader, valid_loader, epoch, result_dict, fold)
 
-        torch.cuda.synchronize()
-        tic1 = time.time()
+            torch.cuda.synchronize()
+            tic2 = time.time()
+            train_time_list.append(tic2 - tic1)
 
-        result_dict = trainer.train(train_loader, valid_loader, epoch, result_dict, fold)
+        torch.cuda.empty_cache()
+        del model, optimizer, train_loader, valid_loader
 
-        torch.cuda.synchronize()
-        tic2 = time.time()
-        train_time_list.append(tic2 - tic1)
-
-    torch.cuda.empty_cache()
-    del model, optimizer, train_loader, valid_loader
-
-    return result_dict
+        return result_dict
 
 
 def main():
@@ -471,13 +413,16 @@ def main():
     validation_proportion = 0.15
 
     target_frequency = train[['Id', 'Pawpularity']].groupby('Pawpularity').count().reset_index()
-    target_frequency['Proba'] = sum(target_frequency['Id'])/target_frequency['Id']
-    target_frequency['Proba'] = target_frequency['Proba']/sum(target_frequency['Proba'])
+    target_frequency['Proba'] = sum(target_frequency['Id']) / target_frequency['Id']
+    target_frequency['Proba'] = target_frequency['Proba'] / sum(target_frequency['Proba'])
 
-    row_proba = train[['Pawpularity']].merge(target_frequency, how='left', left_on='Pawpularity', right_on='Pawpularity')['Proba']
-    row_proba = row_proba/sum(row_proba)
+    row_proba = \
+        train[['Pawpularity']].merge(target_frequency, how='left', left_on='Pawpularity', right_on='Pawpularity')[
+            'Proba']
+    row_proba = row_proba / sum(row_proba)
 
-    indices = np.random.choice(train.index, size=int(train.shape[0] * validation_proportion), replace=False, p=row_proba)
+    indices = np.random.choice(train.index, size=int(train.shape[0] * validation_proportion), replace=False,
+                               p=row_proba)
 
     train['kfold'] = 1
     train.loc[indices, 'kfold'] = 0
@@ -488,7 +433,7 @@ def main():
     for fold in range(1):
         print('----')
         print(f'FOLD: {fold}')
-        result_dict = run(train, fold, model_output_location, freeze_backbone=False)
+        result_dict = run(train, fold, model_output_location, freeze_backbone=True)
         result_list.append(result_dict)
         print('----')
 
@@ -496,7 +441,7 @@ def main():
 
     oof = np.zeros(len(train))
     for fold in tqdm.tqdm(range(1), total=1):
-        model = PawpularityModel('efficientnet-b3-pawpularity', config)
+        model = PawpularityModel('efficientnet-b3-pawpularity')
         model.load_state_dict(
             torch.load(model_output_location + f'model{fold}.bin')
         )
@@ -520,7 +465,7 @@ def main():
             preds += logits.cpu().detach().numpy().tolist()
         oof[val_index] = preds
 
-    print("cv", round(np.sqrt(mean_squared_error(train.target.values, oof)), 4))
+    print("cv", round(np.sqrt(mean_squared_error(train.Pawpularity.values[val_index], oof[val_index])), 4))
 
 
 main()

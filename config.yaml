@@ -1,0 +1,41 @@
+description: # Info dump -- description params are not loaded
+  text: 'very first model run!'
+
+global:
+  seed: 0
+  train_fullmodel: true
+  load_from_pretrained: false
+  pretrained_model_location:
+  folder_prefix: first_model   # TIMESTAMP will be added as suffix
+  num_folds: 5
+
+backbone_model:
+  name: efficient-net-b3
+
+  epochs: 9
+  batch_size: 64
+
+  evaluate_per: epoch   # only epoch is possible atm
+  evaluate_interval: 1  # can take fractions
+
+  learning_rate: 0.1
+  learning_rate_drop_every: 3
+  learning_rate_drop_factor: 10
+
+
+full_model:
+  name: pawpularity-full-model
+
+  epochs: 12
+  batch_size: 64
+
+  evaluate_per: epoch    # only epoch is possible atm
+  evaluate_interval: 1   # can take fractions
+
+  learning_rate: 0.001
+  learning_rate_drop_every: 3
+  learning_rate_drop_factor: 3
+
+
+
+
