@@ -15,12 +15,38 @@ def set_seed(seed):
     return
 
 
+def get_efficient_net_size(name):
+    input_shapes = {
+        'efficient-net-b0': (224,224),
+        'efficient-net-b1': (240, 240),
+        'efficient-net-b2': (260, 260),
+        'efficient-net-b3': (300, 300),
+        'efficient-net-b4': (380, 380),
+        'efficient-net-b5': (456, 456),
+        'efficient-net-b6': (528, 528),
+        'efficient-net-b7': (600, 600)
+    }
+
+    return input_shapes[name]
+
+
+
+
+def create_folds(data, num_splits, seed):
+    data["kfold"] = -1
+    kf = model_selection.KFold(n_splits=num_splits, shuffle=True, random_state=seed)
+    for f, (t_, v_) in enumerate(kf.split(X=data)):
+        data.loc[v_, 'kfold'] = f
+    return data
+
+
 def adjust_learning_rate(optimizer, epoch, lr):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = lr * (0.1 ** (epoch // 30))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     return
+
 
 class AverageMeter(object):
     def __init__(self):
@@ -43,6 +69,7 @@ class AverageMeter(object):
             self.max = val
         if val < self.min:
             self.min = val
+
 
 class SquarePad(object):
     def __call__(self, sample):

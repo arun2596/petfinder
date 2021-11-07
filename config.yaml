@@ -3,14 +3,16 @@ description: # Info dump -- description params are not loaded
 
 global:
   seed: 0
+  train_head_only_model: true
   train_fullmodel: true
-  load_from_pretrained: false
+  efficient_net_version: efficient-net-b3
+  load_from_pretrained: false  # Pretrained weights from 2018 petfinder dataset
   pretrained_model_location:
-  folder_prefix: first_model   # TIMESTAMP will be added as suffix
+  folder_prefix: first_model
   num_folds: 5
 
-backbone_model:
-  name: efficient-net-b3
+head_only_model:
+  name:
 
   epochs: 9
   batch_size: 64
