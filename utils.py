@@ -5,6 +5,7 @@ import torchvision.transforms.functional as F
 import numpy as np
 import random
 
+from sklearn import model_selection
 
 def set_seed(seed):
     np.random.seed(seed)
@@ -17,14 +18,14 @@ def set_seed(seed):
 
 def get_efficient_net_size(name):
     input_shapes = {
-        'efficient-net-b0': (224,224),
-        'efficient-net-b1': (240, 240),
-        'efficient-net-b2': (260, 260),
-        'efficient-net-b3': (300, 300),
-        'efficient-net-b4': (380, 380),
-        'efficient-net-b5': (456, 456),
-        'efficient-net-b6': (528, 528),
-        'efficient-net-b7': (600, 600)
+        'efficientnet-b0': (224,224),
+        'efficientnet-b1': (240, 240),
+        'efficientnet-b2': (260, 260),
+        'efficientnet-b3': (300, 300),
+        'efficientnet-b4': (380, 380),
+        'efficientnet-b5': (456, 456),
+        'efficientnet-b6': (528, 528),
+        'efficientnet-b7': (600, 600)
     }
 
     return input_shapes[name]
@@ -47,6 +48,40 @@ def adjust_learning_rate(optimizer, epoch, lr):
         param_group['lr'] = lr
     return
 
+
+class Logger():
+    def __init__(self, output_location):
+        self.body = []
+        self.header = []
+        self.footer = []
+        self.output_location = output_location
+
+    def log(self, text, place='body'):
+        if place == 'header':
+            self.header.append(text)
+        elif place == 'footer':
+            self.footer.append(text)
+        elif place == 'body':
+            self.body.append(text)
+
+        print(text)
+        return
+
+    def save_log(self):
+        with open(self.output_location, 'a+') as the_file:
+            for line in self.header:
+                the_file.write(str(line)+'\n')
+            the_file.write('-'*50)
+            the_file.write('\n')
+            for line in self.body:
+                the_file.write(str(line) + '\n')
+            the_file.write('-' * 50)
+            the_file.write('\n')
+            for line in self.footer:
+                the_file.write(str(line) + '\n')
+            the_file.write('-' * 50)
+            the_file.write('\n')
+        return
 
 class AverageMeter(object):
     def __init__(self):
@@ -149,3 +184,5 @@ class FlipLR(object):
         img = torchvision.transforms.RandomHorizontalFlip(p=self.proba)(image)
 
         return {'image': img, 'target': target}
+
+

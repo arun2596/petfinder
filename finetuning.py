@@ -30,7 +30,7 @@ from sklearn.metrics import mean_squared_error
 # ------------------------- CUSTOM IMPORTS & UTILS --------------------------------
 
 from utils import set_seed, adjust_learning_rate, SquarePad, Rescale, Normalize, Rerange, FlipLR, AverageMeter, \
-    get_efficient_net_size
+    get_efficient_net_size, Logger
 
 
 # -------------------------- CREATE DATASET ----------------------------------------
@@ -234,22 +234,22 @@ class PawpularityModel(nn.Module):
 
 
 class Trainer:
-    def __init__(self, model, optimizer, model_output_location, log_interval=1,
-                 evaluate_interval=130):
+    def __init__(self, model, optimizer, model_output_location, logger, log_interval=1,
+                 evaluate_interval_fraction=1):
         self.model = model
         self.optimizer = optimizer
         self.log_interval = log_interval
-        self.evaluate_interval = evaluate_interval
+        self.evaluate_interval_fraction = evaluate_interval_fraction
         self.evaluator = Evaluator(self.model)
         self.model_output_location = model_output_location
-
+        self.logger = logger
     def train(self, train_loader, valid_loader, epoch,
               result_dict, fold):
         count = 0
         losses = AverageMeter()
         weighted_losses = AverageMeter()
         self.model.train()
-
+        evaluate_interval = int((len(train_loader) - 1)*self.evaluate_interval_fraction)
         for batch_idx, batch_data in enumerate(train_loader):
             image, target = batch_data['image'], batch_data['target']
             image, target = image.cuda(), target.cuda()
@@ -280,19 +280,19 @@ class Trainer:
                     'train_loss: {: >4.5f}'.format(losses.avg),
                 ]
 
-                print(', '.join(ret))
+                self.logger.log(', '.join(ret))
 
-            if batch_idx != 0 and batch_idx % self.evaluate_interval == 0:
+            if batch_idx != 0 and batch_idx % evaluate_interval == 0:
                 result_dict = self.evaluator.evaluate(
                     valid_loader,
                     epoch,
                     result_dict
                 )
                 if result_dict['val_loss'][-1] < result_dict['best_val_loss']:
-                    print("{} epoch, best epoch was updated! valid_loss: {: >4.5f}".format(epoch,
+                    self.logger.log("{} epoch, best epoch was updated! valid_loss: {: >4.5f}".format(epoch,
                                                                                            result_dict['val_loss'][-1]))
                     result_dict["best_val_loss"] = result_dict['val_loss'][-1]
-                    torch.save(self.model.state_dict(), self.model_output_location + f"model{fold}.bin")
+                    torch.save(self.model.state_dict(), os.path.join(self.model_output_location , f"model{fold}.bin"))
                 self.model.train()
         result_dict['train_loss'].append(losses.avg)
         return result_dict
@@ -341,46 +341,53 @@ class FineTuning:
     def __init__(self, train, config):
         self.train = train
         self.config = config
-        self.folder_name = os.path.join('model_output', 'finetuning', self.config['global']['folder_prefix'])
+        self.folder_name = os.path.join('model_output', 'finetuning', self.config['global']['folder_name'])
         self.input_shape = get_efficient_net_size(self.config['global']['efficient_net_version'])
+        self.logger = Logger(os.path.join(self.folder_name, 'log.txt'))
 
     def run(self):
 
         if self.config['global']['train_head_only_model']:
             result_list = []
+            self.logger.log('Training head only model')
             for fold in range(self.config['global']['num_folds']):
-                print('----')
-                print(f'FOLD: {fold}')
-                result_dict = self.run_fold(batch_size=self.config['global']['head_only_model']['batch_size'],
-                                            learning_rate=self.config['global']['head_only_model']['learning_rate'],
+                self.logger.log('----')
+                self.logger.log(f'FOLD: {fold}')
+                result_dict = self.run_fold(batch_size=self.config['head_only_model']['batch_size'],
+                                            learning_rate=self.config['head_only_model']['learning_rate'],
                                             fold=fold,
-                                            model_ouput_location='model_output/finetuning/',
-                                            epochs=self.config['global']['head_only_model']['epochs'],
+                                            model_ouput_location=os.path.join(self.folder_name, 'head_only_model'),
+                                            epochs=self.config['head_only_model']['epochs'],
+                                            evaluate_interval_fraction=self.config['head_only_model']['evaluate_interval'],
                                             freeze_backbone=True,
                                             load_pretrained=False,
                                             pretrained_model_location=None)
                 result_list.append(result_dict)
-                print('----')
+                self.logger.log('----')
 
-            [print("FOLD::", i, "Loss:: ", fold['best_val_loss']) for i, fold in enumerate(result_list)]
+            [self.logger.log("FOLD::" + str(i) + "Loss:: " + str(fold['best_val_loss']))for i, fold in enumerate(result_list)]
 
-        if self.config['global']['train_fullmodel']:
+        if self.config['global']['train_full_model']:
             result_list = []
+            self.logger.log('Training full model')
             for fold in range(self.config['global']['num_folds']):
-                print('----')
-                print(f'FOLD: {fold}')
-                result_dict = self.run_fold(batch_size=self.config['global']['full_model']['batch_size'],
-                                            learning_rate=self.config['global']['full_model']['learning_rate'],
+                self.logger.log('----')
+                self.logger.log(f'FOLD: {fold}')
+                result_dict = self.run_fold(batch_size=self.config['full_model']['batch_size'],
+                                            learning_rate=self.config['full_model']['learning_rate'],
                                             fold=fold,
-                                            model_ouput_location='model_output/finetuning/',
-                                            epochs=self.config['global']['full_model']['epochs'],
-                                            freeze_backbone=True,
-                                            load_pretrained=False,
-                                            pretrained_model_location=None)
+                                            model_ouput_location=os.path.join(self.folder_name, 'full_model'),
+                                            epochs=self.config['full_model']['epochs'],
+                                            evaluate_interval_fraction= self.config['full_model']['evaluate_interval'],
+                                            freeze_backbone=False,
+                                            load_pretrained=True,
+                                            pretrained_model_location=os.path.join(self.folder_name, 'head_only_model', 'model'+ str(fold) + '.bin')
+                                            )
                 result_list.append(result_dict)
-                print('----')
+                self.logger.log('----')
 
-            [print("FOLD::", i, "Loss:: ", fold['best_val_loss']) for i, fold in enumerate(result_list)]
+            [self.logger.log("FOLD::" + str(i) + "Loss:: " + str(fold['best_val_loss'])) for i, fold in enumerate(result_list)]
+        self.logger.save_log()
 
     def configure_fold(self, batch_size, learning_rate, fold=0):
 
@@ -388,8 +395,8 @@ class FineTuning:
 
         train_loader, valid_loader = make_loader(self.train, batch_size=batch_size, fold=fold, input_shape=self.input_shape)
 
-        num_update_steps_per_epoch = len(train_loader)
-        max_train_steps = epochs * num_update_steps_per_epoch
+        # num_update_steps_per_epoch = len(train_loader)
+        # max_train_steps = epochs * num_update_steps_per_epoch
 
         optimizer = torch.optim.SGD(model.parameters(), learning_rate, momentum=0.9, weight_decay=1e-4)
 
@@ -416,19 +423,22 @@ class FineTuning:
             result_dict
         )
 
-    def run_fold(self, batch_size, learning_rate, fold=0, model_ouput_location='model_output/finetuning/', epochs=1,
+    def run_fold(self, batch_size, learning_rate, fold=0, model_ouput_location='model_output/finetuning/', epochs=1, evaluate_interval_fraction =1,
                  freeze_backbone=False, load_pretrained=False, pretrained_model_location=None):
         model, optimizer, train_loader, valid_loader, result_dict = self.configure_fold(batch_size, learning_rate, fold)
 
         if freeze_backbone:
             model.freeze_backbone()
+            self.logger.log('Backbone freezed')
         else:
             model.unfreeze_backbone()
+            self.logger.log('Backbone unfreezed')
 
         if load_pretrained:
             model.load_state_dict(torch.load(pretrained_model_location))
+            self.logger.log('model loaded from: ' + str(model_ouput_location))
 
-        trainer = Trainer(model, optimizer, model_ouput_location)
+        trainer = Trainer(model, optimizer, model_ouput_location, self.logger, evaluate_interval_fraction=evaluate_interval_fraction)
         train_time_list = []
 
         for epoch in range(epochs):
