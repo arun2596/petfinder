@@ -234,21 +234,28 @@ class PawpularityModel(nn.Module):
 
 
 class Trainer:
-    def __init__(self, model, optimizer, model_output_location, logger, log_interval=1,
+    def __init__(self, model, optimizer, learning_rate, learning_rate_drop_every, learning_rate_drop_factor, model_output_location, logger, log_interval=1,
                  evaluate_interval_fraction=1):
         self.model = model
         self.optimizer = optimizer
+        self.learning_rate = learning_rate
+        self.learning_rate_drop_every = learning_rate_drop_every
+        self.learning_rate_drop_factor = learning_rate_drop_factor
         self.log_interval = log_interval
         self.evaluate_interval_fraction = evaluate_interval_fraction
         self.evaluator = Evaluator(self.model)
         self.model_output_location = model_output_location
         self.logger = logger
-    def train(self, train_loader, valid_loader, epoch,
-              result_dict, fold):
+    def train(self, train_loader, valid_loader, epoch, result_dict, fold):
         count = 0
         losses = AverageMeter()
         weighted_losses = AverageMeter()
+
+        new_lr = adjust_learning_rate(self.optimizer, epoch, self.learning_rate, self.learning_rate_drop_every, self.learning_rate_drop_factor)
+        self.logger.log('Learning rate dropped to: ' + str(new_lr))
+
         self.model.train()
+
         evaluate_interval = int((len(train_loader) - 1)*self.evaluate_interval_fraction)
         for batch_idx, batch_data in enumerate(train_loader):
             image, target = batch_data['image'], batch_data['target']
@@ -355,6 +362,8 @@ class FineTuning:
                 self.logger.log(f'FOLD: {fold}')
                 result_dict = self.run_fold(batch_size=self.config['head_only_model']['batch_size'],
                                             learning_rate=self.config['head_only_model']['learning_rate'],
+                                            learning_rate_drop_every=self.config['head_only_model']['learning_rate_drop_every'],
+                                            learning_rate_drop_factor=self.config['head_only_model']['learning_rate_drop_factor'],
                                             fold=fold,
                                             model_ouput_location=os.path.join(self.folder_name, 'head_only_model'),
                                             epochs=self.config['head_only_model']['epochs'],
@@ -375,6 +384,8 @@ class FineTuning:
                 self.logger.log(f'FOLD: {fold}')
                 result_dict = self.run_fold(batch_size=self.config['full_model']['batch_size'],
                                             learning_rate=self.config['full_model']['learning_rate'],
+                                            learning_rate_drop_every=self.config['full_model']['learning_rate_drop_every'],
+                                            learning_rate_drop_factor=self.config['full_model']['learning_rate_drop_factor'],
                                             fold=fold,
                                             model_ouput_location=os.path.join(self.folder_name, 'full_model'),
                                             epochs=self.config['full_model']['epochs'],
@@ -423,7 +434,7 @@ class FineTuning:
             result_dict
         )
 
-    def run_fold(self, batch_size, learning_rate, fold=0, model_ouput_location='model_output/finetuning/', epochs=1, evaluate_interval_fraction =1,
+    def run_fold(self, batch_size, learning_rate, learning_rate_drop_every, learning_rate_drop_factor, fold=0, model_ouput_location='model_output/finetuning/', epochs=1, evaluate_interval_fraction =1,
                  freeze_backbone=False, load_pretrained=False, pretrained_model_location=None):
         model, optimizer, train_loader, valid_loader, result_dict = self.configure_fold(batch_size, learning_rate, fold)
 
@@ -438,7 +449,7 @@ class FineTuning:
             model.load_state_dict(torch.load(pretrained_model_location))
             self.logger.log('model loaded from: ' + str(model_ouput_location))
 
-        trainer = Trainer(model, optimizer, model_ouput_location, self.logger, evaluate_interval_fraction=evaluate_interval_fraction)
+        trainer = Trainer(model, optimizer, model_output_location = model_ouput_location, learning_rate=learning_rate, learning_rate_drop_factor=learning_rate_drop_factor, learning_rate_drop_every=learning_rate_drop_every, logger=self.logger, evaluate_interval_fraction=evaluate_interval_fraction)
         train_time_list = []
 
         for epoch in range(epochs):
