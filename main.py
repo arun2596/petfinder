@@ -5,6 +5,7 @@ import pandas as pd
 from utils import set_seed, create_folds
 from finetuning import FineTuning
 from shutil import copyfile
+import shutil
 from datetime import date
 
 
@@ -28,7 +29,7 @@ def parse_config(config):
         os.makedirs(os.path.join('model_output', 'finetuning', config['global']['folder_name'], 'head_only_model'))
         os.makedirs(os.path.join('model_output', 'finetuning', config['global']['folder_name'], 'full_model'))
     
-    copyfile('config.yaml',os.path.join(config['global']['folder_name'],'config.yaml'))
+    shutil.copy2('/content/petfinder/config.yaml',os.path.join('model_output', 'finetuning',config['global']['folder_name']))
     return config
 
 
