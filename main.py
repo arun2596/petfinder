@@ -32,17 +32,17 @@ def parse_config(config):
     shutil.copy2('/content/petfinder/config.yaml',os.path.join('model_output', 'finetuning',config['global']['folder_name']))
     return config
 
+def run_main():
+    with open("config.yaml", 'r') as stream:
+        ft_config = yaml.safe_load(stream)
 
-with open("config.yaml", 'r') as stream:
-    ft_config = yaml.safe_load(stream)
+    ft_config = parse_config(ft_config)
 
-ft_config = parse_config(ft_config)
+    #
+    set_seed(ft_config['global']['seed'])
 
-#
-set_seed(ft_config['global']['seed'])
+    train = pd.read_csv('data/raw/train.csv')
+    train = create_folds(train, ft_config['global']['num_folds'], ft_config['global']['seed'])
 
-train = pd.read_csv('data/raw/train.csv')
-train = create_folds(train, ft_config['global']['num_folds'], ft_config['global']['seed'])
-
-ft_exec = FineTuning(train, config=ft_config)
-ft_exec.run()
+    ft_exec = FineTuning(train, config=ft_config)
+    ft_exec.run()
