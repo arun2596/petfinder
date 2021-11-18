@@ -31,7 +31,7 @@ def parse_config(config):
     
     shutil.copy2('/content/petfinder/config.yaml',os.path.join('model_output', 'finetuning',config['global']['folder_name']))
     return config
-def run_exp():
+def run_main():
   with open("config.yaml", 'r') as stream:
       ft_config = yaml.safe_load(stream)
 
