@@ -34,8 +34,13 @@ for i,l in enumerate(lr):
 
   # Execute the experiment
   run_main()
-
+  
   # Save model and config to drive
+  with open("config.yaml", 'r') as stream:
+    ft_config = yaml.safe_load(stream)
+
+  ft_config = parse_config(ft_config)
+  
   if ft_config['global']['save_to_drive']:
     MODEL_PATH = "/content/petfinder/model_output/finetuning/"+ft_config['global']['folder_name']
     shutil.copytree(MODEL_PATH ,OUT_PATH)
