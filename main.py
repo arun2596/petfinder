@@ -2,11 +2,13 @@ import os
 
 import yaml
 import pandas as pd
-from utils import set_seed, create_folds
-from finetuning import FineTuning
+from finetuning import PawpularityModel
 
 from shutil import copyfile
 from datetime import date
+
+from utils.train_handler import TrainHandler
+from utils.utils import set_seed, create_folds
 
 
 def parse_config(config):
@@ -29,7 +31,7 @@ def parse_config(config):
         os.makedirs(os.path.join('model_output', 'finetuning', config['global']['folder_name'], 'head_only_model'))
         os.makedirs(os.path.join('model_output', 'finetuning', config['global']['folder_name'], 'full_model'))
 
-    copyfile('config.yaml', os.path.join(config['global']['folder_name'], 'config.yaml'))
+    copyfile('config.yaml', os.path.join(config['global']['folder_name']))
     return config
 
 
@@ -44,5 +46,5 @@ set_seed(ft_config['global']['seed'])
 train = pd.read_csv('data/raw/train.csv')
 train = create_folds(train, ft_config['global']['num_folds'], ft_config['global']['seed'])
 
-ft_exec = FineTuning(train, config=ft_config)
-ft_exec.run()
+FT_handler = TrainHandler(model_class=PawpularityModel, train=train, config=ft_config)
+FT_handler.run()

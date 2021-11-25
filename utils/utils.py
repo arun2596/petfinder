@@ -7,6 +7,7 @@ import random
 
 from sklearn import model_selection
 
+
 def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
@@ -18,7 +19,7 @@ def set_seed(seed):
 
 def get_efficient_net_size(name):
     input_shapes = {
-        'efficientnet-b0': (224,224),
+        'efficientnet-b0': (224, 224),
         'efficientnet-b1': (240, 240),
         'efficientnet-b2': (260, 260),
         'efficientnet-b3': (300, 300),
@@ -29,8 +30,6 @@ def get_efficient_net_size(name):
     }
 
     return input_shapes[name]
-
-
 
 
 def create_folds(data, num_splits, seed):
@@ -70,8 +69,8 @@ class Logger():
     def save_log(self):
         with open(self.output_location, 'a+') as the_file:
             for line in self.header:
-                the_file.write(str(line)+'\n')
-            the_file.write('-'*50)
+                the_file.write(str(line) + '\n')
+            the_file.write('-' * 50)
             the_file.write('\n')
             for line in self.body:
                 the_file.write(str(line) + '\n')
@@ -82,6 +81,7 @@ class Logger():
             the_file.write('-' * 50)
             the_file.write('\n')
         return
+
 
 class AverageMeter(object):
     def __init__(self):
@@ -184,5 +184,3 @@ class FlipLR(object):
         img = torchvision.transforms.RandomHorizontalFlip(p=self.proba)(image)
 
         return {'image': img, 'target': target}
-
-
