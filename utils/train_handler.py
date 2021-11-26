@@ -136,8 +136,9 @@ class TrainHandler:
             self.logger.log('Backbone unfreezed')
 
         if load_pretrained:
-            model.load_state_dict(torch.load(pretrained_model_location), strict=strict)
+            missing_weight = model.load_state_dict(torch.load(pretrained_model_location), strict=strict)
             self.logger.log('model loaded from: ' + str(pretrained_model_location))
+            self.logger.log('Issues with weight load: ' + str(missing_weight))
 
         trainer = Trainer(model, optimizer, model_output_location=model_ouput_location, learning_rate=learning_rate,
                           learning_rate_drop_factor=learning_rate_drop_factor,
