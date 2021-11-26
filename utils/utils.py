@@ -32,11 +32,16 @@ def get_efficient_net_size(name):
     return input_shapes[name]
 
 
-def create_folds(data, num_splits, seed):
-    data["kfold"] = -1
-    kf = model_selection.KFold(n_splits=num_splits, shuffle=True, random_state=seed)
-    for f, (t_, v_) in enumerate(kf.split(X=data)):
-        data.loc[v_, 'kfold'] = f
+def create_folds(data, num_splits, seed, cross_validation=True):
+    if cross_validation:
+        data["kfold"] = -1
+        kf = model_selection.KFold(n_splits=num_splits, shuffle=True, random_state=seed)
+        for f, (t_, v_) in enumerate(kf.split(X=data)):
+            data.loc[v_, 'kfold'] = f
+    else:
+        print('splitting data with validation set  15%')
+        data["kfold"] = np.random.choice([-1,0], size=data.shape[0], replace=True, p=[0.85, 0.15])
+
     return data
 
 

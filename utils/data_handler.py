@@ -11,18 +11,18 @@ from utils.utils import SquarePad, Rescale, Normalize, Rerange, FlipLR
 
 
 class DatasetRetriever(Dataset):
-    def __init__(self, data, root_dir, mode='train', transform=None):
+    def __init__(self, data, train_image_root_dir, test_image_root_dir=None, mode='train', transform=None):
         self.data = data
 
         self.img_id = self.data.Id.values.tolist()
-        self.targets = self.data.Pawpularity.values.tolist()
+        self.targets = self.data.Target.values.tolist()
 
         self.mode = mode
 
         if self.mode == 'train' or self.mode == 'valid':
-            self.data_dir = os.path.join(root_dir, 'train')
+            self.data_dir = train_image_root_dir
         elif self.mode == 'test':
-            self.data_dir = os.path.join(root_dir, 'test')
+            self.data_dir = test_image_root_dir
         else:
             raise Exception("Invalid mode: " + str(self.mode))
 
@@ -55,7 +55,8 @@ def make_loader(
         batch_size,
         input_shape=(528, 528),
         fold=0,
-        root_dir=os.path.join('data', 'raw')
+        train_image_root_dir=None,
+        test_image_root_dir=None
 ):
     dataset = {'train': data[data['kfold'] != fold], 'valid': data[data['kfold'] == fold]}
 
@@ -76,7 +77,7 @@ def make_loader(
         ])}
 
     train_dataset, valid_dataset = [
-        DatasetRetriever(dataset[mode], transform=transform[mode], root_dir=root_dir, mode=mode) for mode in
+        DatasetRetriever(dataset[mode], transform=transform[mode], train_image_root_dir=train_image_root_dir, test_image_root_dir=test_image_root_dir, mode=mode) for mode in
         ['train', 'valid']]
 
     train_sampler = RandomSampler(dataset['train'])

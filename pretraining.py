@@ -82,7 +82,7 @@ class Pawpularity2018Model(nn.Module):
         if target is not None:
             loss_fn = torch.nn.CrossEntropyLoss()
             #logits = logits.view(-1)
-            loss = loss_fn(logits, target.view(-1))
+            loss = loss_fn(logits, target.long().view(-1))
 
         return (loss, logits) if loss is not None else logits
 

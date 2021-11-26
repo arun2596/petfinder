@@ -14,8 +14,10 @@ class TrainHandler:
         self.model_class = model_class
         self.train = train
         self.config = config
-        self.folder_name = os.path.join('model_output', 'finetuning', self.config['global']['folder_name'])
+        self.folder_name = os.path.join('model_output', self.config['global']['mode'], self.config['global']['folder_name'])
         self.input_shape = get_efficient_net_size(self.config['global']['efficient_net_version'])
+        self.train_image_root_dir = self.config['global']['train_image_root_dir']
+        self.test_image_root_dir = self.config['global']['test_image_root_dir']
         self.logger = Logger(os.path.join(self.folder_name, 'log.txt'))
 
     def run(self):
@@ -26,6 +28,16 @@ class TrainHandler:
             for fold in range(self.config['global']['num_folds']):
                 self.logger.log('----')
                 self.logger.log(f'FOLD: {fold}')
+
+                pretrained_model_location = None
+                load_pretrained = False
+                strict = True
+                if self.config['global']['load_from_pretrained']:
+                    pretrained_model_location = os.path.join(self.config['global']['pretrained_folder_name'],
+                                                             'full_model', 'model0.bin')
+                    load_pretrained = True
+                    strict = False
+
                 result_dict = self.run_fold(batch_size=self.config['head_only_model']['batch_size'],
                                             learning_rate=self.config['head_only_model']['learning_rate'],
                                             learning_rate_drop_every=self.config['head_only_model'][
@@ -38,8 +50,9 @@ class TrainHandler:
                                             evaluate_interval_fraction=self.config['head_only_model'][
                                                 'evaluate_interval'],
                                             freeze_backbone=True,
-                                            load_pretrained=False,
-                                            pretrained_model_location=None)
+                                            load_pretrained=load_pretrained,
+                                            pretrained_model_location=pretrained_model_location,
+                                            strict=strict)
                 result_list.append(result_dict)
                 self.logger.log('----')
 
@@ -65,7 +78,8 @@ class TrainHandler:
                                             freeze_backbone=False,
                                             load_pretrained=True,
                                             pretrained_model_location=os.path.join(self.folder_name, 'head_only_model',
-                                                                                   'model' + str(fold) + '.bin')
+                                                                                   'model' + str(fold) + '.bin'),
+                                            strict=True
                                             )
                 result_list.append(result_dict)
                 self.logger.log('----')
@@ -79,7 +93,7 @@ class TrainHandler:
         model = self.model_class(model_name='efficientnet-b3-pawpularity', config=self.config['global'])
 
         train_loader, valid_loader = make_loader(self.train, batch_size=batch_size, fold=fold,
-                                                 input_shape=self.input_shape)
+                                                 input_shape=self.input_shape, train_image_root_dir=self.train_image_root_dir, test_image_root_dir=self.test_image_root_dir)
 
         # num_update_steps_per_epoch = len(train_loader)
         # max_train_steps = epochs * num_update_steps_per_epoch
@@ -111,7 +125,7 @@ class TrainHandler:
 
     def run_fold(self, batch_size, learning_rate, learning_rate_drop_every, learning_rate_drop_factor, fold=0,
                  model_ouput_location='model_output/finetuning/', epochs=1, evaluate_interval_fraction=1,
-                 freeze_backbone=False, load_pretrained=False, pretrained_model_location=None):
+                 freeze_backbone=False, load_pretrained=False, pretrained_model_location=None, strict=True):
         model, optimizer, train_loader, valid_loader, result_dict = self.configure_fold(batch_size, learning_rate, fold)
 
         if freeze_backbone:
@@ -122,8 +136,8 @@ class TrainHandler:
             self.logger.log('Backbone unfreezed')
 
         if load_pretrained:
-            model.load_state_dict(torch.load(pretrained_model_location))
-            self.logger.log('model loaded from: ' + str(model_ouput_location))
+            model.load_state_dict(torch.load(pretrained_model_location), strict=strict)
+            self.logger.log('model loaded from: ' + str(pretrained_model_location))
 
         trainer = Trainer(model, optimizer, model_output_location=model_ouput_location, learning_rate=learning_rate,
                           learning_rate_drop_factor=learning_rate_drop_factor,

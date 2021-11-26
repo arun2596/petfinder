@@ -34,7 +34,7 @@ for i, l in enumerate(lr):
         doc = yaml.dump(config, f, default_flow_style=False, allow_unicode=True, encoding=None)
 
     # Execute the experiment
-    run_finetuning()
+    run_config()
 
     # Save model and config to drive
     with open("config.yaml", 'r') as stream:
