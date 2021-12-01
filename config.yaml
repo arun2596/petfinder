@@ -2,10 +2,10 @@ description: # Info dump -- description params are not loaded
   text: 'very first model run!'
 
 global:
-  folder_suffix: first_model   # cant use '-' in folder names
+  folder_suffix: pt_ft_1   # cant use '-' in folder names
   mode: finetuning          #pretraining | finetuning
   load_from_pretrained: true  # Pretrained weights from 2018 petfinder dataset
-  pretrained_model_location: 20211125-first_model
+  pretrained_model_location: 20211125-pretrained_effnetb3
   train_head_only_model: true
   train_full_model: true
   efficient_net_version: efficientnet-b3
@@ -18,7 +18,7 @@ global:
 head_only_model:
   name:
 
-  epochs: 1
+  epochs: 6
   batch_size: 64
 
   evaluate_per: epoch   # only epoch is possible atm
@@ -32,12 +32,12 @@ head_only_model:
 full_model:
   name: pawpularity-full-model
 
-  epochs: 1
+  epochs: 6
   batch_size: 64
 
   evaluate_per: epoch    # only epoch is possible atm
   evaluate_interval: 1   # can take fractions
 
   learning_rate: 0.001
-  learning_rate_drop_every: 3
-  learning_rate_drop_factor: 0.33
+  learning_rate_drop_every: 2
+  learning_rate_drop_factor: 0.1

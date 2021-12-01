@@ -30,28 +30,34 @@ def parse_config(config):
         raise Exception('folder with the suffix already exists')
     else:
 
-        os.makedirs(os.path.join('model_output', config['global']['mode'], folder_prefix + '-' + config['global']['folder_suffix']))
+        os.makedirs(os.path.join('model_output', config['global']['mode'],
+                                 folder_prefix + '-' + config['global']['folder_suffix']))
         config['global']['folder_name'] = folder_prefix + '-' + config['global']['folder_suffix']
-        os.makedirs(os.path.join('model_output', config['global']['mode'], config['global']['folder_name'], 'head_only_model'))
-        os.makedirs(os.path.join('model_output', config['global']['mode'], config['global']['folder_name'], 'full_model'))
+        os.makedirs(
+            os.path.join('model_output', config['global']['mode'], config['global']['folder_name'], 'head_only_model'))
+        os.makedirs(
+            os.path.join('model_output', config['global']['mode'], config['global']['folder_name'], 'full_model'))
 
     if config['global']['mode'] == 'pretraining':
         config['global']['num_folds'] = 1
 
     if config['global']['load_from_pretrained']:
         if config['global']['mode'] == 'pretraining':
-            raise Exception('Cannot load pretrained weights for pretraining step. Change "load_from_pretrained" to False')
+            raise Exception(
+                'Cannot load pretrained weights for pretraining step. Change "load_from_pretrained" to False')
         pretrained_folder_list = os.listdir(os.path.join('model_output', 'pretraining'))
 
         if not config['global']['pretrained_model_location']:
             raise Exception('pretrained_model_location is missing in config')
 
         if config['global']['pretrained_model_location'] in pretrained_folder_list:
-            config['global']['pretrained_folder_name'] = os.path.join('model_output', 'pretraining', config['global']['pretrained_model_location'])
+            config['global']['pretrained_folder_name'] = os.path.join('model_output', 'pretraining',
+                                                                      config['global']['pretrained_model_location'])
         else:
             raise Exception('pretrained_model_location folder not found')
 
-    copyfile('config.yaml', os.path.join('model_output', config['global']['mode'], config['global']['folder_name'], 'config.yaml'))
+    copyfile('config.yaml',
+             os.path.join('model_output', config['global']['mode'], config['global']['folder_name'], 'config.yaml'))
 
     return config
 
@@ -74,7 +80,7 @@ def run_finetuning(config):
     train = pd.read_csv(os.path.join('data', 'raw', 'train.csv'))
     train = create_folds(train, config['global']['num_folds'], config['global']['seed'])
 
-    train.rename({'Pawpularity':'Target'}, inplace=True, axis=1)
+    train.rename({'Pawpularity': 'Target'}, inplace=True, axis=1)
 
     config['global']['train_image_root_dir'] = os.path.join('data', 'raw', 'train')
     config['global']['test_image_root_dir'] = os.path.join('data', 'raw', 'test')
@@ -84,16 +90,22 @@ def run_finetuning(config):
 
 
 def run_pretraining(config):
-
     set_seed(config['global']['seed'])
 
     train = pd.read_csv(os.path.join('data', '2018_data', 'train', 'train.csv'))
-    train.rename({'PetID':'Id', 'AdoptionSpeed': 'Target'}, inplace=True, axis=1)
-    train = train[train['PhotoAmt']!=0].reset_index(drop=True)
+    train.rename({'PetID': 'Id', 'AdoptionSpeed': 'Target'}, inplace=True, axis=1)
+    train = train[train['PhotoAmt'] != 0].reset_index(drop=True)
+
+    new_target = []
+    new_id = []
+    for row in train.itertuples():
+        for i in range(1, int(row.PhotoAmt) + 1):
+            new_target.append(row.Target)
+            new_id.append(row.Id + '-' + str(int(i)))
+
+    train = pd.DataFrame({'Id': new_id, 'Target': new_target})
 
     train = create_folds(train, config['global']['num_folds'], config['global']['seed'], cross_validation=False)
-
-    train['Id'] += '-1'
 
     config['global']['train_image_root_dir'] = os.path.join('data', '2018_data', 'train_images')
     config['global']['test_image_root_dir'] = os.path.join('data', '2018_data', 'test_images')
