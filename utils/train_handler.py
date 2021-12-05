@@ -83,8 +83,9 @@ class TrainHandler:
 
         # num_update_steps_per_epoch = len(train_loader)
         # max_train_steps = epochs * num_update_steps_per_epoch
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=False)
 
-        optimizer = torch.optim.SGD(model.parameters(), learning_rate, momentum=0.9, weight_decay=1e-4)
+        #optimizer = torch.optim.SGD(model.parameters(), learning_rate, momentum=0.9, weight_decay=1e-4)
 
         if torch.cuda.device_count() >= 1:
             print('Model pushed to {} GPU(s), type {}.'.format(
