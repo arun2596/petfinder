@@ -42,6 +42,8 @@ def run_finetuning():
         ft_config = yaml.safe_load(stream)
 
     ft_config = parse_config(ft_config)
+    with open("config.yaml",'w') as f:
+        doc = yaml.dump(ft_config,f,default_flow_style = False, allow_unicode = True, encoding = None)
 
     set_seed(ft_config['global']['seed'])
 
