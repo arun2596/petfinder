@@ -15,7 +15,10 @@ class TrainHandler:
         self.train = train
         self.config = config
         self.folder_name = os.path.join('model_output', self.config['global']['mode'], self.config['global']['folder_name'])
-        self.input_shape = get_efficient_net_size(self.config['global']['efficient_net_version'])
+        if self.config['global']['mode']=='swin':
+            self.input_shape = (384, 384)
+        else:
+            self.input_shape = get_efficient_net_size(self.config['global']['efficient_net_version'])
         self.train_image_root_dir = self.config['global']['train_image_root_dir']
         self.test_image_root_dir = self.config['global']['test_image_root_dir']
         self.logger = Logger(os.path.join(self.folder_name, 'log.txt'))
@@ -97,8 +100,10 @@ class TrainHandler:
 
         # num_update_steps_per_epoch = len(train_loader)
         # max_train_steps = epochs * num_update_steps_per_epoch
-
-        optimizer = torch.optim.SGD(model.parameters(), learning_rate, momentum=0.9, weight_decay=1e-4)
+        if self.config['global']['optimizer']=='adam':
+            optimizer = torch.optim.Adam(model.parameters(), learning_rate)
+        else:
+            optimizer = torch.optim.SGD(model.parameters(), learning_rate, momentum=0.9, weight_decay=1e-4)
 
         if torch.cuda.device_count() >= 1:
             print('Model pushed to {} GPU(s), type {}.'.format(
@@ -143,7 +148,8 @@ class TrainHandler:
         trainer = Trainer(model, optimizer, model_output_location=model_ouput_location, learning_rate=learning_rate,
                           learning_rate_drop_factor=learning_rate_drop_factor,
                           learning_rate_drop_every=learning_rate_drop_every, logger=self.logger,
-                          evaluate_interval_fraction=evaluate_interval_fraction)
+                          evaluate_interval_fraction=evaluate_interval_fraction,
+                          config=self.config)
         train_time_list = []
 
         for epoch in range(epochs):
@@ -168,9 +174,10 @@ class TrainHandler:
 
 class Trainer:
     def __init__(self, model, optimizer, learning_rate, learning_rate_drop_every, learning_rate_drop_factor,
-                 model_output_location, logger, log_interval=1,
+                 model_output_location, logger, config, log_interval=1,
                  evaluate_interval_fraction=1):
         self.model = model
+        self.config = config
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.learning_rate_drop_every = learning_rate_drop_every
@@ -185,9 +192,10 @@ class Trainer:
         count = 0
         losses = AverageMeter()
 
-        new_lr = adjust_learning_rate(self.optimizer, epoch, self.learning_rate, self.learning_rate_drop_every,
+        if self.config['global']['optimizer']=='sgd':
+            new_lr = adjust_learning_rate(self.optimizer, epoch, self.learning_rate, self.learning_rate_drop_every,
                                       self.learning_rate_drop_factor)
-        self.logger.log('Learning rate dropped to: ' + str(new_lr))
+            self.logger.log('Learning rate dropped to: ' + str(new_lr))
 
         self.model.train()
 

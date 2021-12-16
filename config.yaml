@@ -2,13 +2,14 @@ description: # Info dump -- description params are not loaded
   text: 'very first model run!'
 
 global:
-  folder_suffix: pt_ft_1   # cant use '-' in folder names
-  mode: finetuning          #pretraining | finetuning
-  load_from_pretrained: true  # Pretrained weights from 2018 petfinder dataset
-  pretrained_model_location: 20211125-pretrained_effnetb3
+  folder_suffix: swin_mod1   # cant use '-' in folder names
+  mode: swin          #pretraining | finetuning | swin
+  load_from_pretrained: false  # Pretrained weights from 2018 petfinder dataset
+  pretrained_model_location: #20211125-pretrained_effnetb3
   train_head_only_model: true
   train_full_model: true
-  efficient_net_version: efficientnet-b3
+  efficient_net_version: swin_base_patch4_window12_384 #efficientnet-b3
+  optimizer: adam
   drive_save_path: "/content/drive/MyDrive/petfinder"
   save_to_drive: true
   num_folds: 5
@@ -24,7 +25,7 @@ head_only_model:
   evaluate_per: epoch   # only epoch is possible atm
   evaluate_interval: 1  # can take only fractions or 1 | value < 1
 
-  learning_rate: 0.1
+  learning_rate: 0.0003
   learning_rate_drop_every: 2
   learning_rate_drop_factor: 0.1
 
@@ -38,6 +39,6 @@ full_model:
   evaluate_per: epoch    # only epoch is possible atm
   evaluate_interval: 1   # can take fractions
 
-  learning_rate: 0.001
+  learning_rate: 0.00005
   learning_rate_drop_every: 2
   learning_rate_drop_factor: 0.1

@@ -6,6 +6,7 @@ from shutil import copyfile
 
 from finetuning import PawpularityModel
 from pretraining import Pawpularity2018Model
+from swin import SwinModel
 
 from utils.train_handler import TrainHandler
 from utils.utils import set_seed, create_folds
@@ -18,8 +19,11 @@ def parse_config(config):
     today = date.today()
     folder_prefix = str(today.strftime("%Y%m%d"))
 
-    if config['global']['mode'] not in ['pretraining', 'finetuning']:
+    if config['global']['mode'] not in ['pretraining', 'finetuning', 'swin']:
         raise Exception('Unknown mode in global config settings: ' + str(config['global']['mode']))
+
+    if 'optimizer' not in config['global'].keys():
+        config['global']['optimizer'] = 'sgd'
 
     folder_list = os.listdir(os.path.join('model_output', config['global']['mode']))
     folder_suffixes = [x.split('-')[-1] for x in folder_list]
@@ -111,6 +115,20 @@ def run_pretraining(config):
     config['global']['test_image_root_dir'] = os.path.join('data', '2018_data', 'test_images')
 
     ft_handler = TrainHandler(model_class=Pawpularity2018Model, train=train, config=config)
+    ft_handler.run()
+
+def run_swin(config):
+    set_seed(config['global']['seed'])
+
+    train = pd.read_csv(os.path.join('data', 'raw', 'train.csv'))
+    train = create_folds(train, config['global']['num_folds'], config['global']['seed'])
+
+    train.rename({'Pawpularity': 'Target'}, inplace=True, axis=1)
+
+    config['global']['train_image_root_dir'] = os.path.join('data', 'raw', 'train')
+    config['global']['test_image_root_dir'] = os.path.join('data', 'raw', 'test')
+
+    ft_handler = TrainHandler(model_class=SwinModel, train=train, config=config)
     ft_handler.run()
 
 

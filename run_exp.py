@@ -17,7 +17,7 @@ for i, l in enumerate(lr):
     config['global']['save_to_drive'] = True
     today = datetime.now()
     folder_prefix = str(today.strftime("%Y_%m_%d__%H:%M:%S"))
-    OUT_PATH = os.pat.join(config['global']['drive_save_path'], folder_prefix, "_model_outputs")
+    OUT_PATH = os.path.join(config['global']['drive_save_path'], folder_prefix, "_model_outputs")
 
     config['global']['folder_suffix'] = 'model_' + folder_prefix + '__' + str(i)
 
