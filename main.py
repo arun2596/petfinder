@@ -74,6 +74,8 @@ def run_config():
         run_finetuning(config)
     elif config['global']['mode'] == 'pretraining':
         run_pretraining(config)
+    elif config['global']['mode'] == 'swin':
+        run_swin(config)
     else:
         raise Exception('Unknown mode in global config settings: ' + str(config['global']['mode']))
 
